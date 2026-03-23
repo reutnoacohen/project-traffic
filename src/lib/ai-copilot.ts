@@ -3,7 +3,8 @@
  * Future: Integrate with OpenAI, Claude, or internal LLM.
  */
 
-import type { Campaign, Alert, RawDataRow } from "@prisma/client";
+import type { Campaign, Alert } from "@prisma/client";
+import { escapeHtml } from "./sanitize";
 
 export interface AICopilotContext {
   campaign: Campaign;
@@ -43,8 +44,8 @@ export async function getAICopilotResponse(
   // Mock responses based on common queries
   if (lower.includes("summarize") || lower.includes("summary")) {
     return {
-      message: `**Campaign Summary: ${context.campaign.offerName}**\n\n` +
-        `Status: ${context.campaign.status}\n` +
+      message: `**Campaign Summary: ${escapeHtml(context.campaign.offerName)}**\n\n` +
+        `Status: ${escapeHtml(context.campaign.status)}\n` +
         `Payout: $${context.campaign.payoutWeGet ?? "—"}\n` +
         `Budget: ${context.campaign.budget ? `$${context.campaign.budget}` : "—"}\n` +
         (context.rawDataSummary
@@ -68,7 +69,7 @@ export async function getAICopilotResponse(
       : [];
     return {
       message: failing.length
-        ? `**Failing KPIs:**\n${failing.map(([k, r]) => `- ${k}: actual ${r.actual} vs target ${r.target}`).join("\n")}`
+        ? `**Failing KPIs:**\n${failing.map(([k, r]) => `- ${escapeHtml(k)}: actual ${r.actual} vs target ${r.target}`).join("\n")}`
         : `No failing KPIs detected. All metrics are within target.`,
     };
   }
@@ -81,7 +82,7 @@ export async function getAICopilotResponse(
 
   if (lower.includes("client") && lower.includes("summary")) {
     return {
-      message: `**Client-friendly summary (draft):**\nCampaign "${context.campaign.offerName}" is ${context.campaign.status}. ` +
+      message: `**Client-friendly summary (draft):**\nCampaign "${escapeHtml(context.campaign.offerName)}" is ${escapeHtml(context.campaign.status)}. ` +
         (context.rawDataSummary
           ? `Delivered ${context.rawDataSummary.totalInstalls.toLocaleString()} installs with $${context.rawDataSummary.totalSpend.toLocaleString()} spend.`
           : "Awaiting performance data."),

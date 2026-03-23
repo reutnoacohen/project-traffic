@@ -1,0 +1,126 @@
+// Traffic Reporter - Phase 2 Schema
+// SQLite for MVP - migrate to Postgres when scaling
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Campaign / Offer Configuration
+model Campaign {
+  id                     String    @id @default(cuid())
+  offerName              String    @map("offer_name")
+  afPrt                  String?   @map("af_prt")
+  previewUrl             String?   @map("preview_url")
+  mmp                    String?   // Mobile Measurement Partner
+  os                     String?   // JSON: ["iOS","Android"]
+  excludedStates         String?   @map("excluded_states") // JSON array
+  payoutWeGet            Float?    @map("payout_we_get")
+  payoutPo               Float?    @map("payout_po")
+  budget                 Float?
+  payableEvents          String?   @map("payable_events") // JSON array
+  vtaEnabled             Boolean   @default(false) @map("vta_enabled")
+  dummyAllowed           Boolean   @default(false) @map("dummy_allowed")
+  ctvEnabled             Boolean   @default(false) @map("ctv_enabled")
+  kpiBaseline            String?   @map("kpi_baseline") // JSON
+  vtaLookbackDays        Int?      @map("vta_lookback_days")
+  ctaMinInstall          Int?      @map("cta_min_install")
+  ctaMinClick            Int?      @map("cta_min_click")
+  installToSignupMin     Float?    @map("install_to_signup_min") // %
+  fraudMaxPct            Float?    @map("fraud_max_pct")
+  fraudTool              String?   @map("fraud_tool")
+  trackingParamTemplate  String?   @map("tracking_param_template")
+  onelinkTemplate        String?   @map("onelink_template")
+  creativesLink          String?   @map("creatives_link")
+  notes                  String?
+  status                 String    @default("draft") // draft, active, paused
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+
+  caps         CampaignCap[]
+  kpiRules     CampaignKpiRule[]
+  rawUploads   RawDataUpload[]
+  rawDataRows  RawDataRow[]
+  alerts       Alert[]
+}
+
+model CampaignCap {
+  id         String   @id @default(cuid())
+  campaignId String   @map("campaign_id")
+  capType    String   @map("cap_type") // impressions_daily, clicks_daily, installs_daily, spend_daily
+  value      Float
+  unit       String?  @default("")
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+}
+
+model CampaignKpiRule {
+  id              String   @id @default(cuid())
+  campaignId      String   @map("campaign_id")
+  metric          String   // cti, its, cpa, roas, retention_d1, fraud_pct, etc.
+  operator        String   // min, max
+  thresholdValue  Float    @map("threshold_value")
+  thresholdUnit   String?  @map("threshold_unit")
+  campaign        Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+}
+
+// Raw Data Ingestion
+model RawDataUpload {
+  id          String   @id @default(cuid())
+  campaignId  String?  @map("campaign_id")
+  fileName    String?  @map("file_name")
+  sourceType  String   @map("source_type") // upload, manual, paste
+  status      String   @default("pending") // pending, processing, completed, failed
+  rowsCount   Int?     @map("rows_count")
+  rawText     String?  @map("raw_text") // For paste/notes
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  campaign    Campaign?    @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  rawDataRows RawDataRow[]
+}
+
+model RawDataRow {
+  id          String   @id @default(cuid())
+  uploadId    String   @map("upload_id")
+  campaignId  String?  @map("campaign_id")
+  date        String   // YYYY-MM-DD
+  source      String?
+  campaignName String? @map("campaign_name")
+  installs    Int      @default(0)
+  clicks      Int      @default(0)
+  spend       Float    @default(0)
+  revenue     Float    @default(0)
+  signups     Int      @default(0)
+  fraudCount  Int      @default(0) @map("fraud_count")
+  extra       String?  // JSON for additional columns
+
+  upload      RawDataUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  campaign    Campaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+}
+
+// Column Mapping (global + per-campaign override in future)
+model ColumnMapping {
+  id               String   @id @default(cuid())
+  appsflyerColumn  String   @map("appsflyer_column")
+  internalField    String   @map("internal_field")
+  campaignId       String?  @map("campaign_id") // null = global default
+  createdAt        DateTime @default(now()) @map("created_at")
+}
+
+// Alerts
+model Alert {
+  id         String   @id @default(cuid())
+  campaignId String?  @map("campaign_id")
+  type       String   // kpi_below_min, fraud_above_max, excluded_geo, cap_near_limit, zero_conversion, performance_drop
+  severity   String   // high, medium, low
+  metric     String?
+  expected   String?
+  actual     String?
+  details    String?  // JSON
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+}
